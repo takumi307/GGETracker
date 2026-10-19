@@ -776,7 +776,7 @@ async function saveInlineEdit(id) {
     if (!ok) return;
   }
 
-  var oldForSync = { type: entries[idx].type, x: entries[idx].x, y: entries[idx].y };
+  var oldForSync = { type: entries[idx].type, x: entries[idx].x, y: entries[idx].y, label: entries[idx].label || '', eventAt: entries[idx].eventAt };
   entries[idx].type = type;
   entries[idx].label = label;
   entries[idx].x = x;
@@ -789,7 +789,7 @@ async function saveInlineEdit(id) {
     entries[idx].resultLogged = false;
   }
   if (isAquaFamily(oldForSync.type) && aquaKey(oldForSync) !== aquaKey(entries[idx])) addTombstone(oldForSync);
-  touchAqua(entries[idx]);
+  if (aquaKey(oldForSync) !== aquaKey(entries[idx]) || oldForSync.label !== (entries[idx].label || '') || oldForSync.eventAt !== entries[idx].eventAt) touchAqua(entries[idx]);
 
   saveEntries();
   inlineEditId = null;
@@ -1213,11 +1213,12 @@ function addTombstone(e) {
   tombstones.push({ type: e.type, x: Number(e.x), y: Number(e.y), updatedAt: Date.now() });
   saveTombstones();
 }
-/* 両方とも生きているレコード同士：eventAt（時刻）が新しい方を採用。同じなら updatedAt が新しい方 */
+/* 両方とも生きているレコード同士：最後に編集した方（updatedAt が新しい方）を採用。
+   同じ（または未記録）なら eventAt（時刻）が新しい方 */
 function remoteWins(local, remote) {
-  var le = Number(local.eventAt) || 0, re = Number(remote.eventAt) || 0;
-  if (re !== le) return re > le;
-  return (Number(remote.updatedAt) || 0) > (Number(local.updatedAt) || 0);
+  var lu = Number(local.updatedAt) || 0, ru = Number(remote.updatedAt) || 0;
+  if (ru !== lu) return ru > lu;
+  return (Number(remote.eventAt) || 0) > (Number(local.eventAt) || 0);
 }
 function applyRemoteItems(items) {
   var changed = 0;
