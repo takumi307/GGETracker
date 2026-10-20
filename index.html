@@ -161,6 +161,11 @@
     </div>
     <p class="statSub" id="countSummary" style="text-align:center; margin:-6px 0 14px;"></p>
     <button class="addBtn secondary" id="syncNowBtn" type="button" style="display:none; margin-bottom:14px;">🔄 アクアを今すぐ同期</button>
+    <details id="syncLogBox" style="display:none; margin:-6px 0 14px; background:#fff; border:1px solid #e0dccf; border-radius:10px; padding:8px 12px;">
+      <summary style="cursor:pointer; font-weight:700; font-size:13px;">📜 同期の反映履歴</summary>
+      <div id="syncLogBody" style="margin-top:8px; font-size:12px; line-height:1.6;"></div>
+      <button class="addBtn secondary" id="syncLogClear" type="button" style="margin-top:8px; padding:6px 10px; font-size:12px;">履歴を消去</button>
+    </details>
     <details class="panel" style="display:block;margin-bottom:14px;"><summary style="font-weight:700;cursor:pointer;">表示・記録設定（種類ごとにオン／オフ）</summary>
       <p class="miniLabel">オフにしても登録データは削除されず、一覧・攻撃可能タブで非表示になります。</p>
       <div id="typeSettings"></div>
@@ -1197,6 +1202,9 @@ var TOMB_KEEP_MS = 60 * 24 * 3600 * 1000;
 var syncSettings = { url: '', token: '', lastSyncDate: '', lastSyncAt: 0 };
 var tombstones = [];
 var syncing = false;
+var SYNC_LOG_KEY = 'ggeAquaSyncLog';
+var syncLog = [];
+try { syncLog = JSON.parse(localStorage.getItem(SYNC_LOG_KEY) || '[]'); if (!Array.isArray(syncLog)) syncLog = []; } catch (e) { syncLog = []; }
 try { syncSettings = Object.assign(syncSettings, JSON.parse(localStorage.getItem(SYNC_KEY) || '{}')); } catch (e) {}
 try { tombstones = JSON.parse(localStorage.getItem(TOMB_KEY) || '[]'); if (!Array.isArray(tombstones)) tombstones = []; } catch (e) { tombstones = []; }
 
@@ -1220,7 +1228,8 @@ function remoteWins(local, remote) {
   if (ru !== lu) return ru > lu;
   return (Number(remote.eventAt) || 0) > (Number(local.eventAt) || 0);
 }
-function applyRemoteItems(items) {
+function applyRemoteItems(items, changes) {
+  changes = changes || [];
   var changed = 0;
   items.forEach(function(r) {
     if (!r || !isAquaFamily(r.type) || !Number.isFinite(Number(r.x)) || !Number.isFinite(Number(r.y))) return;
@@ -1229,7 +1238,7 @@ function applyRemoteItems(items) {
     if (r.deleted) {
       var newest = locals.reduce(function(m, l) { return Math.max(m, Number(l.updatedAt) || 0); }, 0);
       if (locals.length && newest > ru) return;            // こちらの登録の方が新しい → 削除は無視
-      if (locals.length) { entries = entries.filter(function(e) { return locals.indexOf(e) === -1; }); changed++; }
+      if (locals.length) { entries = entries.filter(function(e) { return locals.indexOf(e) === -1; }); changed++; changes.push({ kind: 'delete', type: r.type, x: Number(r.x), y: Number(r.y) }); }
       tombstones = tombstones.filter(function(t) { return aquaKey(t) !== k; });
       tombstones.push({ type: r.type, x: Number(r.x), y: Number(r.y), updatedAt: ru });
       return;
@@ -1241,15 +1250,43 @@ function applyRemoteItems(items) {
       entries.push({ id: 'sync-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7), type: r.type, label: r.label || '', x: Number(r.x), y: Number(r.y), eventAt: Number(r.eventAt), updatedAt: ru });
       tombstones = tombstones.filter(function(t) { return aquaKey(t) !== k; });
       changed++;
+      changes.push({ kind: 'add', type: r.type, x: Number(r.x), y: Number(r.y), to: Number(r.eventAt) });
       return;
     }
     var l = locals[0];
     if (remoteWins(l, r)) {
+      var fromAt = Number(l.eventAt);
+      changes.push({ kind: 'update', type: r.type, x: Number(r.x), y: Number(r.y), from: fromAt, to: Number(r.eventAt) });
       l.eventAt = Number(r.eventAt); l.updatedAt = ru; l.label = r.label || l.label || '';
       changed++;
     }
   });
   return changed;
+}
+function saveSyncLog() { try { localStorage.setItem(SYNC_LOG_KEY, JSON.stringify(syncLog)); } catch (e) {} }
+function addSyncLog(rec) { syncLog.push(rec); if (syncLog.length > 40) syncLog = syncLog.slice(-40); saveSyncLog(); }
+function renderSyncLog() {
+  var box = document.getElementById('syncLogBox'), body = document.getElementById('syncLogBody');
+  if (!box || !body) return;
+  box.style.display = syncConfigured() ? 'block' : 'none';
+  if (!syncLog.length) { body.innerHTML = '<p class="miniLabel" style="margin:0;">まだ同期履歴はありません。</p>'; return; }
+  var label = { add: '＋追加', update: '✎更新', delete: '✕削除' };
+  body.innerHTML = syncLog.slice().reverse().map(function(l) {
+    var ch = l.changes || [];
+    var n = { add: 0, update: 0, delete: 0 };
+    ch.forEach(function(c) { n[c.kind]++; });
+    var head = '<b>' + escapeHtml(formatClock(new Date(l.at))) + '</b>（' + (l.auto ? '自動' : '手動') + '）　' +
+      (ch.length ? '相手の更新 ' + ch.length + '件（追加' + n.add + '・更新' + n.update + '・削除' + n.delete + '）' : '相手の更新なし') +
+      '　<span style="color:#888;">送信 ' + (l.sent || 0) + '件</span>';
+    var rows = ch.map(function(c) {
+      var t = typeLabel(c.type) + ' (' + c.x + ',' + c.y + ')';
+      var tm = '';
+      if (c.kind === 'add') tm = ' → 次の浮上 ' + formatClock(new Date(c.to));
+      if (c.kind === 'update') tm = ' → 次の浮上 ' + formatClock(new Date(c.to)) + '（旧 ' + formatClock(new Date(c.from)) + '）';
+      return '<div style="padding-left:12px;">' + label[c.kind] + ' ' + escapeHtml(t) + escapeHtml(tm) + '</div>';
+    }).join('');
+    return '<div style="padding:6px 0; border-bottom:1px solid #eee;">' + head + rows + '</div>';
+  }).join('');
 }
 function syncStatusText() {
   if (!syncConfigured()) return '同期：未設定';
@@ -1257,6 +1294,7 @@ function syncStatusText() {
   return '同期：設定済み／最終同期 ' + formatClock(new Date(syncSettings.lastSyncAt));
 }
 function updateSyncUI() {
+  renderSyncLog();
   var btn = document.getElementById('syncNowBtn');
   if (btn) btn.style.display = syncConfigured() ? 'block' : 'none';
   var st = document.getElementById('syncStatus');
@@ -1285,11 +1323,13 @@ async function syncAquaNow(auto) {
     var text = await res.text(), data;
     try { data = JSON.parse(text); } catch (pe) { throw new Error('GASから正しい応答がありません。ウェブアプリの公開設定（アクセスできるユーザー：全員）とURLを確認してください。'); }
     if (!data || !data.ok) throw new Error(data && data.error ? data.error : 'サーバーの応答が不正です');
-    var changed = applyRemoteItems(Array.isArray(data.items) ? data.items : []);
+    var changes = [];
+    var changed = applyRemoteItems(Array.isArray(data.items) ? data.items : [], changes);
+    addSyncLog({ at: Date.now(), auto: !!auto, sent: items.filter(function(i) { return !i.deleted; }).length, changes: changes });
     saveEntries(); saveTombstones();
     syncSettings.lastSyncDate = getLocalDateKey(Date.now()); syncSettings.lastSyncAt = Date.now(); saveSyncSettings();
     renderAll(); updateSyncUI();
-    showToast(auto ? '🔄 本日のアクアデータを同期しました' : '🔄 同期しました（相手の更新 ' + changed + '件を反映）');
+    showToast(auto ? '🔄 本日のアクアデータを同期しました' + (changed ? '（相手の更新 ' + changed + '件）' : '') : '🔄 同期しました（相手の更新 ' + changed + '件を反映）');
     return true;
   } catch (err) {
     if (auto) showToast('アクアの自動同期に失敗しました');
@@ -1318,6 +1358,7 @@ document.getElementById('syncSaveBtn').addEventListener('click', function() {
   saveSyncSettings(); updateSyncUI();
   syncAquaNow(false);
 });
+document.getElementById('syncLogClear').addEventListener('click', function() { syncLog = []; saveSyncLog(); renderSyncLog(); });
 document.addEventListener('visibilitychange', function() { if (document.visibilityState === 'visible') autoSyncIfNeeded(); });
 
 /* ---------- init & ticker ---------- */
