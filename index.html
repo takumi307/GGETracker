@@ -185,6 +185,21 @@
       <button class="addBtn secondary" id="syncSaveBtn" type="button">同期設定を保存して今すぐ同期</button>
       <p class="miniLabel" id="syncStatus" style="margin-top:2px;"></p>
       <p class="miniLabel">URLと合言葉を両方空欄にして保存すると、同期を解除します（この端末のデータは消えません）。</p>
+      <h3 style="font-size:14px;margin:18px 0 6px;">⚔️ 要塞・ドラゴン通知（Discord）</h3>
+      <p class="miniLabel">アクアとは別のGAS・別のDiscordチャンネルへ通知します。送信されるのは「通知対象の種類・座標・攻撃可能時刻・メモ」だけです。自分の座標・距離の設定・ルビー履歴は送信されず、距離の絞り込みはこの端末で判定します（自分の座標は上の欄を使います）。</p>
+      <div class="field"><label>通知用GASのURL（アクアとは別のウェブアプリURL）</label><input id="ntUrl" type="text" autocomplete="off" placeholder="https://script.google.com/macros/s/.../exec"></div>
+      <div class="field"><label>合言葉</label><input id="ntToken" type="password" autocomplete="off" placeholder="通知用GAS側と同じ合言葉"></div>
+      <label style="display:flex;gap:8px;align-items:center;margin:6px 0 10px;font-weight:700;"><input type="checkbox" id="ntOn">通知を有効にする（オフにすると全通知が止まります）</label>
+      <div id="ntTypes"></div>
+      <div class="field" style="margin-top:10px;"><label>通知タイミング（5分おきの確認なので、おおよその目安になります）</label><select id="ntLead"></select></div>
+      <label style="display:flex;gap:8px;align-items:center;margin:6px 0;"><input type="checkbox" id="ntQuietOn">通知を止める時間帯を使う（日本時間）</label>
+      <div class="rowFields" style="align-items:flex-end;"><div class="field"><label>停止の開始</label><select id="ntQuietStart"></select></div><div class="field"><label>停止の終了（この時刻から再開）</label><select id="ntQuietEnd"></select></div></div>
+      <label style="display:flex;gap:8px;align-items:center;margin:2px 0 10px;"><input type="checkbox" id="ntDigest">停止が明けたら、停止中に攻撃可能になった分を1回にまとめて通知する</label>
+      <div style="display:flex;gap:8px;">
+        <button class="addBtn secondary" id="ntSaveBtn" type="button" style="flex:1;">通知設定を保存して送信</button>
+        <button class="addBtn secondary" id="ntTestBtn" type="button" style="flex:1;">テスト通知</button>
+      </div>
+      <p class="miniLabel" id="ntStatus" style="margin-top:2px;"></p>
       <h3 style="font-size:14px;margin:18px 0 6px;color:#b5442e;">月次リセット</h3>
       <p class="miniLabel">小アクア・大アクアの座標登録をまとめて削除できます。攻撃履歴・ルビー集計は残ります。同期設定済みの場合、削除は次回の同期で相手側にも反映されます。</p>
       <button class="btnDelete" id="clearAquaCoordinates" type="button" style="width:100%;padding:12px;margin-top:6px;">小アクア・大アクアの座標を全削除</button>
@@ -1361,6 +1376,162 @@ document.getElementById('syncSaveBtn').addEventListener('click', function() {
 document.getElementById('syncLogClear').addEventListener('click', function() { syncLog = []; saveSyncLog(); renderSyncLog(); });
 document.addEventListener('visibilitychange', function() { if (document.visibilityState === 'visible') autoSyncIfNeeded(); });
 
+/* ---------- 要塞・ドラゴン通知（Discord / 個人用GAS） ---------- */
+var NOTIFY_KEY = 'ggeNotifySettings';
+var NOTIFY_TYPES = [['dragon','ドラゴン'],['fortress','砂漠の要塞'],['wildFortress','野生の要塞']];
+var NOTIFY_MAX_AGE_MS = 12 * 3600 * 1000;   // 攻撃可能になってから12時間以内の分だけ送る（GAS側のまとめ通知の範囲と合わせる）
+var NOTIFY_MAX_ITEMS = 500;
+var notifySettings = { url:'', token:'', on:false, types:{ dragon:{on:true,near:false,dist:50}, fortress:{on:true,near:false,dist:50}, wildFortress:{on:true,near:false,dist:50} }, leadMin:10, quietOn:false, quietStart:0, quietEnd:7, digest:true, lastSyncAt:0, lastCount:0, lastPayload:'' };
+try {
+  var rawNt = JSON.parse(localStorage.getItem(NOTIFY_KEY) || '{}');
+  var typesNt = notifySettings.types;
+  notifySettings = Object.assign(notifySettings, rawNt);
+  NOTIFY_TYPES.forEach(function(t) { typesNt[t[0]] = Object.assign({}, typesNt[t[0]], (rawNt.types || {})[t[0]] || {}); });
+  notifySettings.types = typesNt;
+} catch (e) {}
+var notifySending = false, notifyTimer = null, notifyDirty = false;
+
+function saveNotifySettings() { try { localStorage.setItem(NOTIFY_KEY, JSON.stringify(notifySettings)); } catch (e) {} }
+function notifyConfigured() { return !!(notifySettings.url && notifySettings.token); }
+
+/* GASへ送る「通知してよい対象」だけの一覧を作る（種類オン／オフ・距離・期限で絞る） */
+function buildNotifyItems() {
+  if (!notifySettings.on) return [];
+  var now = Date.now();
+  var map = {};
+  entries.forEach(function(e) {
+    var cfg = notifySettings.types[e.type];
+    if (!cfg || !cfg.on) return;
+    var x = Number(e.x), y = Number(e.y), at = Number(e.eventAt);
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(at) || at <= 0) return;
+    if (at < now - NOTIFY_MAX_AGE_MS) return;
+    if (cfg.near) {
+      if (!hasHome(e.type)) return;                       // 自分の座標が未入力なら、距離指定の種類は通知しない
+      var d = coordDistance(e), lim = Number(cfg.dist);
+      if (!Number.isFinite(lim) || lim < 0) lim = 50;
+      if (d === null || d > lim) return;
+    }
+    var k = e.type + '|' + x + '|' + y;
+    if (!map[k] || map[k].eventAt < at) map[k] = { type: e.type, x: x, y: y, label: String(e.label || '').slice(0, 50), eventAt: at };
+  });
+  return Object.keys(map).map(function(k) { return map[k]; }).sort(function(a, b) { return a.eventAt - b.eventAt; }).slice(0, NOTIFY_MAX_ITEMS);
+}
+function notifyWarnings() {
+  var w = [];
+  NOTIFY_TYPES.forEach(function(t) { var c = notifySettings.types[t[0]]; if (c.on && c.near && !hasHome(t[0])) w.push(t[1]); });
+  return w.length ? '⚠ 距離指定中ですが自分の座標が未入力のため、通知されません：' + w.join('・') : '';
+}
+function notifyStatusText() {
+  if (!notifyConfigured()) return '通知：未設定';
+  var base = !notifySettings.on ? '通知：停止中（オフ）' : (notifySettings.lastSyncAt ? '通知：有効／通知対象 ' + notifySettings.lastCount + '件／最終送信 ' + formatClock(new Date(notifySettings.lastSyncAt)) : '通知：有効（まだ送信していません）');
+  var w = notifyWarnings();
+  return w ? base + '\n' + w : base;
+}
+function updateNotifyUI() {
+  var st = document.getElementById('ntStatus');
+  if (st) { st.style.whiteSpace = 'pre-line'; st.textContent = notifyStatusText(); }
+}
+function postNotify(body) {
+  return fetch(notifySettings.url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) }).then(function(res) { return res.text(); }).then(function(text) {
+    var data;
+    try { data = JSON.parse(text); } catch (pe) { throw new Error('GASから正しい応答がありません。ウェブアプリの公開設定（アクセスできるユーザー：全員）とURLを確認してください。'); }
+    return data;
+  });
+}
+async function syncNotifyNow(manual) {
+  if (!notifyConfigured()) { if (manual) showAlert('先にGASのURLと合言葉を入力してください'); return false; }
+  if (notifySending) { notifyDirty = true; return false; }
+  var items = buildNotifyItems();
+  var settings = { leadMin: Number(notifySettings.leadMin), quietOn: !!notifySettings.quietOn, quietStart: Number(notifySettings.quietStart), quietEnd: Number(notifySettings.quietEnd), digest: notifySettings.digest !== false };
+  var sig = JSON.stringify({ s: settings, i: items, u: notifySettings.url });
+  if (!manual && sig === notifySettings.lastPayload && notifySettings.lastSyncAt) { notifyDirty = false; return true; }
+  notifySending = true;
+  try {
+    var data = await postNotify({ action: 'snapshot', token: notifySettings.token, settings: settings, items: items });
+    if (!data.ok) throw new Error(data.error || '送信に失敗しました');
+    notifySettings.lastPayload = sig; notifySettings.lastSyncAt = Date.now(); notifySettings.lastCount = items.length;
+    saveNotifySettings(); notifyDirty = false; updateNotifyUI();
+    if (manual) showToast('通知設定を送信しました（通知対象 ' + items.length + '件）');
+    return true;
+  } catch (err) {
+    notifyDirty = true;
+    if (manual) showAlert('通知設定の送信に失敗しました\n' + (err && err.message ? err.message : err));
+    return false;
+  } finally {
+    notifySending = false;
+  }
+}
+/* 登録データ・設定が変わったら、少し待ってからまとめて送る */
+function scheduleNotifySync() {
+  if (!notifyConfigured()) return;
+  notifyDirty = true;
+  clearTimeout(notifyTimer);
+  notifyTimer = setTimeout(function() { syncNotifyNow(false); }, 3000);
+}
+(function() {
+  var origSaveEntries = saveEntries;
+  saveEntries = function() { origSaveEntries.apply(this, arguments); scheduleNotifySync(); };
+  var origSaveSettings = saveTrackerSettings;
+  saveTrackerSettings = function() { origSaveSettings.apply(this, arguments); scheduleNotifySync(); };
+})();
+document.addEventListener('visibilitychange', function() { if (document.visibilityState === 'visible' && notifyDirty) scheduleNotifySync(); });
+
+function readNotifyForm() {
+  notifySettings.url = document.getElementById('ntUrl').value.trim();
+  notifySettings.token = document.getElementById('ntToken').value.trim();
+  notifySettings.on = document.getElementById('ntOn').checked;
+  NOTIFY_TYPES.forEach(function(t) {
+    var k = t[0], v = Number(document.querySelector('[data-ntdist="' + k + '"]').value);
+    notifySettings.types[k] = { on: document.querySelector('[data-nton="' + k + '"]').checked, near: document.querySelector('[data-ntnear="' + k + '"]').checked, dist: (Number.isFinite(v) && v >= 0 && document.querySelector('[data-ntdist="' + k + '"]').value.trim() !== '') ? v : 50 };
+  });
+  notifySettings.leadMin = Number(document.getElementById('ntLead').value);
+  notifySettings.quietOn = document.getElementById('ntQuietOn').checked;
+  notifySettings.quietStart = Number(document.getElementById('ntQuietStart').value);
+  notifySettings.quietEnd = Number(document.getElementById('ntQuietEnd').value);
+  notifySettings.digest = document.getElementById('ntDigest').checked;
+}
+function initNotifyUI() {
+  document.getElementById('ntTypes').innerHTML = NOTIFY_TYPES.map(function(t) {
+    var c = notifySettings.types[t[0]];
+    return '<div style="padding:7px 0;border-bottom:1px solid #e5e5e5;"><label style="display:flex;gap:8px;align-items:center;margin:4px 0;color:#2c2c2a;"><input type="checkbox" data-nton="' + t[0] + '"' + (c.on ? ' checked' : '') + '>' + t[1] + 'を通知</label>' +
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:4px 0 4px 24px;color:#555;font-size:13px;"><label style="display:flex;gap:6px;align-items:center;"><input type="checkbox" data-ntnear="' + t[0] + '"' + (c.near ? ' checked' : '') + '>距離上限以内のみ通知</label>' +
+      '<input type="number" min="0" step="1" data-ntdist="' + t[0] + '" value="' + c.dist + '" style="width:76px;padding:5px;border:1px solid #ccc;border-radius:6px;"><span>以内</span></div></div>';
+  }).join('');
+  document.getElementById('ntLead').innerHTML = [[0,'攻撃可能になったら'],[5,'5分前'],[10,'10分前'],[15,'15分前'],[30,'30分前']].map(function(o) { return '<option value="' + o[0] + '">' + o[1] + '</option>'; }).join('');
+  var hours = ''; for (var h = 0; h < 24; h++) hours += '<option value="' + h + '">' + h + '時</option>';
+  document.getElementById('ntQuietStart').innerHTML = hours;
+  document.getElementById('ntQuietEnd').innerHTML = hours;
+  document.getElementById('ntUrl').value = notifySettings.url || '';
+  document.getElementById('ntToken').value = notifySettings.token || '';
+  document.getElementById('ntOn').checked = !!notifySettings.on;
+  var leadSel = document.getElementById('ntLead');
+  leadSel.value = String(notifySettings.leadMin);
+  if (leadSel.value !== String(notifySettings.leadMin)) leadSel.value = '10';
+  document.getElementById('ntQuietOn').checked = !!notifySettings.quietOn;
+  document.getElementById('ntQuietStart').value = String(notifySettings.quietStart);
+  document.getElementById('ntQuietEnd').value = String(notifySettings.quietEnd);
+  document.getElementById('ntDigest').checked = notifySettings.digest !== false;
+  document.getElementById('ntSaveBtn').addEventListener('click', function() {
+    readNotifyForm();
+    if (!notifySettings.url && !notifySettings.token) {
+      notifySettings.lastPayload = ''; notifySettings.lastSyncAt = 0; notifySettings.lastCount = 0; notifySettings.on = false;
+      saveNotifySettings(); updateNotifyUI(); showToast('通知設定を解除しました'); return;
+    }
+    if (!notifyConfigured()) { showAlert('URLと合言葉は両方入力してください'); return; }
+    saveNotifySettings(); updateNotifyUI(); syncNotifyNow(true);
+  });
+  document.getElementById('ntTestBtn').addEventListener('click', async function() {
+    readNotifyForm(); saveNotifySettings();
+    if (!notifyConfigured()) { showAlert('先にGASのURLと合言葉を入力してください'); return; }
+    try {
+      var data = await postNotify({ action: 'test', token: notifySettings.token });
+      if (data.ok) showToast('テスト通知を送りました。Discordを確認してください');
+      else showAlert('テスト通知に失敗しました\n' + (data.error || ''));
+    } catch (err) { showAlert('テスト通知に失敗しました\n' + (err && err.message ? err.message : err)); }
+  });
+  updateNotifyUI();
+}
+
 /* ---------- init & ticker ---------- */
 migrateIfNeeded();
 loadEntries();
@@ -1384,6 +1555,8 @@ updateSyncUI();
 renderAll();
 renderStats();
 autoSyncIfNeeded();
+initNotifyUI();
+scheduleNotifySync();
 
 setInterval(function() {
   var active = document.activeElement;
