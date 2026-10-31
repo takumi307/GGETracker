@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>要塞・ドラゴン トラッカー</title>
+<title>GGETracker</title>
 <style>
   * { box-sizing: border-box; }
   body {
@@ -161,6 +161,7 @@
     </div>
     <p class="statSub" id="countSummary" style="text-align:center; margin:-6px 0 14px;"></p>
     <button class="addBtn secondary" id="syncNowBtn" type="button" style="display:none; margin-bottom:14px;">🔄 アクアを今すぐ同期</button>
+    <button class="addBtn secondary" id="syncNowBtnFort" type="button" style="display:none; margin-bottom:14px;">🔄 要塞・ドラゴンを今すぐ同期</button>
     <details id="syncLogBox" style="display:none; margin:-6px 0 14px; background:#fff; border:1px solid #e0dccf; border-radius:10px; padding:8px 12px;">
       <summary style="cursor:pointer; font-weight:700; font-size:13px;">📜 同期の反映履歴</summary>
       <div id="syncLogBody" style="margin-top:8px; font-size:12px; line-height:1.6;"></div>
@@ -185,21 +186,26 @@
       <button class="addBtn secondary" id="syncSaveBtn" type="button">同期設定を保存して今すぐ同期</button>
       <p class="miniLabel" id="syncStatus" style="margin-top:2px;"></p>
       <p class="miniLabel">URLと合言葉を両方空欄にして保存すると、同期を解除します（この端末のデータは消えません）。</p>
-      <h3 style="font-size:14px;margin:18px 0 6px;">⚔️ 要塞・ドラゴン通知（Discord）</h3>
-      <p class="miniLabel">アクアとは別のGAS・別のDiscordチャンネルへ通知します。送信されるのは「通知対象の種類・座標・攻撃可能時刻・メモ」だけです。自分の座標・距離の設定・ルビー履歴は送信されず、距離の絞り込みはこの端末で判定します（自分の座標は上の欄を使います）。</p>
-      <div class="field"><label>通知用GASのURL（アクアとは別のウェブアプリURL）</label><input id="ntUrl" type="text" autocomplete="off" placeholder="https://script.google.com/macros/s/.../exec"></div>
-      <div class="field"><label>合言葉</label><input id="ntToken" type="password" autocomplete="off" placeholder="通知用GAS側と同じ合言葉"></div>
-      <label style="display:flex;gap:8px;align-items:center;margin:6px 0 10px;font-weight:700;"><input type="checkbox" id="ntOn">通知を有効にする（オフにすると全通知が止まります）</label>
-      <div id="ntTypes"></div>
-      <div class="field" style="margin-top:10px;"><label>通知タイミング（5分おきの確認なので、おおよその目安になります）</label><select id="ntLead"></select></div>
-      <label style="display:flex;gap:8px;align-items:center;margin:6px 0;"><input type="checkbox" id="ntQuietOn">通知を止める時間帯を使う（日本時間）</label>
-      <div class="rowFields" style="align-items:flex-end;"><div class="field"><label>停止の開始</label><select id="ntQuietStart"></select></div><div class="field"><label>停止の終了（この時刻から再開）</label><select id="ntQuietEnd"></select></div></div>
-      <label style="display:flex;gap:8px;align-items:center;margin:2px 0 10px;"><input type="checkbox" id="ntDigest">停止が明けたら、停止中に攻撃可能になった分を1回にまとめて通知する</label>
-      <div style="display:flex;gap:8px;">
-        <button class="addBtn secondary" id="ntSaveBtn" type="button" style="flex:1;">通知設定を保存して送信</button>
-        <button class="addBtn secondary" id="ntTestBtn" type="button" style="flex:1;">テスト通知</button>
+      <h3 style="font-size:14px;margin:18px 0 6px;">要塞・ドラゴン同期＋Discord通知（個人用スプレッドシート）</h3>
+      <p class="miniLabel">ドラゴン・砂漠の要塞・野生の要塞の「種類・座標・時刻・メモ」だけを共有します。自分の座標・距離設定・ルビー履歴は送信されません。「端末同期」では、別の端末でも同じURLと合言葉を入れると確認・編集・削除が反映されます。「通知のみ」は従来どおり、この端末の一覧をGASへ送ってDiscord通知に使うだけです。どちらもこのページを開いている間は<b>5分おき</b>に自動で実行します（アクア用とは別のGAS・別のURLです）。</p>
+      <div class="field"><label>方式</label><select id="fortMode"><option value="sync">端末同期（全端末で確認・編集・削除を共有）</option><option value="snapshot">通知のみ（従来方式：この端末の一覧をGASへ送るだけ）</option></select></div>
+      <p class="miniLabel" id="fortModeNote" style="margin-top:2px;"></p>
+      <div class="field"><label>同期URL（要塞・ドラゴン用GASのウェブアプリURL）</label><input id="fortSyncUrl" type="text" autocomplete="off" placeholder="https://script.google.com/macros/s/.../exec"></div>
+      <div class="field"><label>合言葉</label><input id="fortSyncToken" type="password" autocomplete="off" placeholder="GAS側と同じ合言葉"></div>
+      <p class="miniLabel" style="margin:10px 0 4px;">Discord通知の設定（時刻は日本時間。最後に同期した端末の設定が使われます）</p>
+      <div class="rowFields">
+        <div class="field"><label>何分前に通知</label><input id="fortLeadMin" type="number" min="0" max="60" step="1" placeholder="10"></div>
       </div>
-      <p class="miniLabel" id="ntStatus" style="margin-top:2px;"></p>
+      <label style="display:flex;gap:8px;align-items:center;margin:6px 0;font-size:13px;"><input type="checkbox" id="fortQuietOn">通知を止める時間帯を使う</label>
+      <div class="rowFields">
+        <div class="field"><label>停止の開始（時）</label><input id="fortQuietStart" type="number" min="0" max="23" step="1" placeholder="0"></div>
+        <div class="field"><label>停止の終了（時）</label><input id="fortQuietEnd" type="number" min="0" max="23" step="1" placeholder="7"></div>
+      </div>
+      <label style="display:flex;gap:8px;align-items:center;margin:6px 0 10px;font-size:13px;"><input type="checkbox" id="fortDigest">停止が明けたら、停止中に攻撃可能になった分をまとめて通知</label>
+      <button class="addBtn secondary" id="fortSyncSaveBtn" type="button">同期設定を保存して今すぐ同期</button>
+      <button class="addBtn secondary" id="fortTestBtn" type="button">Discord通知テスト</button>
+      <p class="miniLabel" id="fortSyncStatus" style="margin-top:2px;"></p>
+      <p class="miniLabel">URLと合言葉を両方空欄にして保存すると、同期を解除します（この端末のデータは消えません）。通知の対象は、この端末の「表示」と「距離フィルター」の設定に合うものだけです（端末ごとに設定が違うと、最後に同期した端末の設定になります）。</p>
       <h3 style="font-size:14px;margin:18px 0 6px;color:#b5442e;">月次リセット</h3>
       <p class="miniLabel">小アクア・大アクアの座標登録をまとめて削除できます。攻撃履歴・ルビー集計は残ります。同期設定済みの場合、削除は次回の同期で相手側にも反映されます。</p>
       <button class="btnDelete" id="clearAquaCoordinates" type="button" style="width:100%;padding:12px;margin-top:6px;">小アクア・大アクアの座標を全削除</button>
@@ -655,7 +661,7 @@ document.getElementById('bulkSave').addEventListener('click', async function() {
     if (seen[key] || findCoordDuplicate(type, c.x, c.y, null)) return;
     seen[key] = true;
     var bulkEntry = { id: Date.now() + '-' + Math.random().toString(36).slice(2, 9), type: type, label: '', x: c.x, y: c.y, eventAt: now };
-    touchAqua(bulkEntry);
+    touchSync(bulkEntry);
     entries.push(bulkEntry);
     added++;
   });
@@ -727,7 +733,7 @@ document.getElementById('saveBtn').addEventListener('click', async function() {
     eventAt = intervalForType(type) ? (now + remainMs + intervalForType(type)) : (now + remainMs);
   }
   var newEntry = { id: Date.now() + '-' + Math.random().toString(36).slice(2, 7), type: type, label: label, x: x, y: y, eventAt: eventAt };
-  touchAqua(newEntry);
+  touchSync(newEntry);
   entries.push(newEntry);
   saveEntries(); closePanel(); renderAll();
   showToast('追加しました');
@@ -808,8 +814,8 @@ async function saveInlineEdit(id) {
     entries[idx].eventAt = intervalForType(type) ? (Date.now() + remainMs + intervalForType(type)) : (Date.now() + remainMs);
     entries[idx].resultLogged = false;
   }
-  if (isAquaFamily(oldForSync.type) && aquaKey(oldForSync) !== aquaKey(entries[idx])) addTombstone(oldForSync);
-  if (aquaKey(oldForSync) !== aquaKey(entries[idx]) || oldForSync.label !== (entries[idx].label || '') || oldForSync.eventAt !== entries[idx].eventAt) touchAqua(entries[idx]);
+  if (chanOfType(oldForSync.type) && aquaKey(oldForSync) !== aquaKey(entries[idx])) addTombstone(oldForSync);
+  if (aquaKey(oldForSync) !== aquaKey(entries[idx]) || oldForSync.label !== (entries[idx].label || '') || oldForSync.eventAt !== entries[idx].eventAt) touchSync(entries[idx]);
 
   saveEntries();
   inlineEditId = null;
@@ -834,7 +840,7 @@ function updateReady(id) {
   // アクア系は入力した残り時間に再浮上間隔を加算。その他は入力時間をそのまま反映。
   entries[idx].eventAt = Date.now() + remainMs + intervalForType(type);
   entries[idx].resultLogged = false;
-  touchAqua(entries[idx]);
+  touchSync(entries[idx]);
   saveEntries();
   renderAll();
   showToast('更新しました');
@@ -1032,7 +1038,7 @@ function processImportRaw(raw) {
       if (item.eventAt !== undefined) nextEntry.eventAt = item.eventAt;
       else if (item.attackableAt !== undefined) nextEntry.eventAt = item.attackableAt;
       if (nextEntry.eventAt !== oldEntry.eventAt) nextEntry.resultLogged = false;
-      touchAqua(nextEntry);
+      touchSync(nextEntry);
       entries[index] = nextEntry;
       if (nextEntry.id != null) existingIds[nextEntry.id] = index;
       var nextKey = coordKey(nextEntry);
@@ -1040,7 +1046,7 @@ function processImportRaw(raw) {
       updated++;
       return;
     }
-    if (item.updatedAt == null) touchAqua(item);
+    if (item.updatedAt == null) touchSync(item);
     entries.push(item);
     existingIds[item.id] = entries.length - 1;
     if (key !== null) existingCoords[key] = entries.length - 1;
@@ -1209,32 +1215,58 @@ async function deleteHistory(id) {
 
 function renderAll() { updateNearWarning(); render(); renderReady(); }
 
-/* ---------- アクア同期（Googleスプレッドシート / GAS） ---------- */
-/* 同期対象は大アクア・小アクアのみ。その他のデータ・設定・履歴は一切送信しない。 */
-var SYNC_KEY = 'ggeAquaSyncSettings';
-var TOMB_KEY = 'ggeAquaTombstones';
+/* ---------- 同期（Googleスプレッドシート / GAS） ---------- */
+/* 2系統：①アクア（大・小）  ②要塞・ドラゴン（砂漠の要塞・野生の要塞を含む）。
+   それぞれ別のGAS・別のURL・別の合言葉。各系統の対象の種類・座標・時刻・メモだけを送信する。
+   自分の座標・距離設定・ルビー履歴は一切送信しない。 */
 var TOMB_KEEP_MS = 60 * 24 * 3600 * 1000;
-var syncSettings = { url: '', token: '', lastSyncDate: '', lastSyncAt: 0 };
-var tombstones = [];
-var syncing = false;
+var SYNC_RETRY_MS = 5 * 60 * 1000;      // 失敗時の再試行は5分以上あける
 var SYNC_LOG_KEY = 'ggeAquaSyncLog';
+var SYNC_CHANNELS = [
+  {
+    id: 'aqua', name: 'アクア', types: ['aqua', 'smallAqua'],
+    settingsKey: 'ggeAquaSyncSettings', tombKey: 'ggeAquaTombstones',
+    intervalMs: 0,                       // 0 = 1日1回（日付が変わって最初に開いた時）
+    btnId: 'syncNowBtn', btnLabel: '🔄 アクアを今すぐ同期',
+    urlId: 'syncUrl', tokenId: 'syncToken', statusId: 'syncStatus', saveBtnId: 'syncSaveBtn',
+    defaults: { url: '', token: '', lastSyncDate: '', lastSyncAt: 0 }
+  },
+  {
+    id: 'fort', name: '要塞・ドラゴン', types: ['dragon', 'fortress', 'wildFortress'],
+    settingsKey: 'ggeFortSyncSettings', tombKey: 'ggeFortTombstones',
+    intervalMs: 5 * 60 * 1000,           // ★同期の頻度：5分おき（ページを開いている間）
+    btnId: 'syncNowBtnFort', btnLabel: '🔄 要塞・ドラゴンを今すぐ同期',
+    urlId: 'fortSyncUrl', tokenId: 'fortSyncToken', statusId: 'fortSyncStatus', saveBtnId: 'fortSyncSaveBtn',
+    defaults: { url: '', token: '', lastSyncDate: '', lastSyncAt: 0, mode: 'sync', leadMin: 10, quietOn: false, quietStart: 0, quietEnd: 7, digest: true }
+  }
+];
+var CH = {};
+SYNC_CHANNELS.forEach(function(ch) {
+  CH[ch.id] = ch;
+  ch.settings = Object.assign({}, ch.defaults);
+  try { ch.settings = Object.assign(ch.settings, JSON.parse(localStorage.getItem(ch.settingsKey) || '{}')); } catch (e) {}
+  ch.tombs = [];
+  try { ch.tombs = JSON.parse(localStorage.getItem(ch.tombKey) || '[]'); if (!Array.isArray(ch.tombs)) ch.tombs = []; } catch (e) { ch.tombs = []; }
+  ch.syncing = false; ch.lastTryAt = 0; ch.failStreak = 0;
+});
 var syncLog = [];
 try { syncLog = JSON.parse(localStorage.getItem(SYNC_LOG_KEY) || '[]'); if (!Array.isArray(syncLog)) syncLog = []; } catch (e) { syncLog = []; }
-try { syncSettings = Object.assign(syncSettings, JSON.parse(localStorage.getItem(SYNC_KEY) || '{}')); } catch (e) {}
-try { tombstones = JSON.parse(localStorage.getItem(TOMB_KEY) || '[]'); if (!Array.isArray(tombstones)) tombstones = []; } catch (e) { tombstones = []; }
 
-function saveSyncSettings() { try { localStorage.setItem(SYNC_KEY, JSON.stringify(syncSettings)); } catch (e) {} }
-function saveTombstones() { try { localStorage.setItem(TOMB_KEY, JSON.stringify(tombstones)); } catch (e) {} }
+function chanOfType(t) { for (var i = 0; i < SYNC_CHANNELS.length; i++) { if (SYNC_CHANNELS[i].types.indexOf(t) !== -1) return SYNC_CHANNELS[i]; } return null; }
+function saveSyncSettings(ch) { try { localStorage.setItem(ch.settingsKey, JSON.stringify(ch.settings)); } catch (e) {} }
+function saveTombstones(ch) { try { localStorage.setItem(ch.tombKey, JSON.stringify(ch.tombs)); } catch (e) {} }
 function aquaKey(o) { return o.type + '|' + Number(o.x) + '|' + Number(o.y); }
-function syncConfigured() { return !!(syncSettings.url && syncSettings.token); }
-function touchAqua(e) { if (e && isAquaFamily(e.type)) e.updatedAt = Date.now(); }
+function syncConfigured(ch) { return !!(ch.settings.url && ch.settings.token); }
+function touchSync(e) { if (e && chanOfType(e.type)) e.updatedAt = Date.now(); }
 /* 削除は「墓標」として記録し、同期で相手側にも伝える */
 function addTombstone(e) {
-  if (!e || !isAquaFamily(e.type) || e.x == null || e.y == null) return;
+  if (!e) return;
+  var ch = chanOfType(e.type);
+  if (!ch || e.x == null || e.y == null) return;
   var k = aquaKey(e);
-  tombstones = tombstones.filter(function(t) { return aquaKey(t) !== k; });
-  tombstones.push({ type: e.type, x: Number(e.x), y: Number(e.y), updatedAt: Date.now() });
-  saveTombstones();
+  ch.tombs = ch.tombs.filter(function(t) { return aquaKey(t) !== k; });
+  ch.tombs.push({ type: e.type, x: Number(e.x), y: Number(e.y), updatedAt: Date.now() });
+  saveTombstones(ch);
 }
 /* 両方とも生きているレコード同士：最後に編集した方（updatedAt が新しい方）を採用。
    同じ（または未記録）なら eventAt（時刻）が新しい方 */
@@ -1243,27 +1275,27 @@ function remoteWins(local, remote) {
   if (ru !== lu) return ru > lu;
   return (Number(remote.eventAt) || 0) > (Number(local.eventAt) || 0);
 }
-function applyRemoteItems(items, changes) {
+function applyRemoteItems(ch, items, changes) {
   changes = changes || [];
   var changed = 0;
   items.forEach(function(r) {
-    if (!r || !isAquaFamily(r.type) || !Number.isFinite(Number(r.x)) || !Number.isFinite(Number(r.y))) return;
+    if (!r || ch.types.indexOf(r.type) === -1 || !Number.isFinite(Number(r.x)) || !Number.isFinite(Number(r.y))) return;
     var k = aquaKey(r), ru = Number(r.updatedAt) || 0;
-    var locals = entries.filter(function(e) { return isAquaFamily(e.type) && aquaKey(e) === k; });
+    var locals = entries.filter(function(e) { return ch.types.indexOf(e.type) !== -1 && aquaKey(e) === k; });
     if (r.deleted) {
       var newest = locals.reduce(function(m, l) { return Math.max(m, Number(l.updatedAt) || 0); }, 0);
       if (locals.length && newest > ru) return;            // こちらの登録の方が新しい → 削除は無視
       if (locals.length) { entries = entries.filter(function(e) { return locals.indexOf(e) === -1; }); changed++; changes.push({ kind: 'delete', type: r.type, x: Number(r.x), y: Number(r.y) }); }
-      tombstones = tombstones.filter(function(t) { return aquaKey(t) !== k; });
-      tombstones.push({ type: r.type, x: Number(r.x), y: Number(r.y), updatedAt: ru });
+      ch.tombs = ch.tombs.filter(function(t) { return aquaKey(t) !== k; });
+      ch.tombs.push({ type: r.type, x: Number(r.x), y: Number(r.y), updatedAt: ru });
       return;
     }
     if (!Number.isFinite(Number(r.eventAt))) return;
-    var tomb = tombstones.find(function(t) { return aquaKey(t) === k; });
+    var tomb = ch.tombs.find(function(t) { return aquaKey(t) === k; });
     if (!locals.length) {
       if (tomb && (Number(tomb.updatedAt) || 0) >= ru) return;   // こちらで削除済み（相手の登録の方が古い）
       entries.push({ id: 'sync-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7), type: r.type, label: r.label || '', x: Number(r.x), y: Number(r.y), eventAt: Number(r.eventAt), updatedAt: ru });
-      tombstones = tombstones.filter(function(t) { return aquaKey(t) !== k; });
+      ch.tombs = ch.tombs.filter(function(t) { return aquaKey(t) !== k; });
       changed++;
       changes.push({ kind: 'add', type: r.type, x: Number(r.x), y: Number(r.y), to: Number(r.eventAt) });
       return;
@@ -1271,266 +1303,245 @@ function applyRemoteItems(items, changes) {
     var l = locals[0];
     if (remoteWins(l, r)) {
       var fromAt = Number(l.eventAt);
-      changes.push({ kind: 'update', type: r.type, x: Number(r.x), y: Number(r.y), from: fromAt, to: Number(r.eventAt) });
-      l.eventAt = Number(r.eventAt); l.updatedAt = ru; l.label = r.label || l.label || '';
+      var newAt = Number(r.eventAt);
+      changes.push({ kind: 'update', type: r.type, x: Number(r.x), y: Number(r.y), from: fromAt, to: newAt });
+      if (newAt !== fromAt) l.resultLogged = false;           // 時刻が変わった＝新しい周期。攻撃結果の記録は再び可能にする
+      l.eventAt = newAt; l.updatedAt = ru;
+      if (r.label != null) l.label = String(r.label);
       changed++;
     }
   });
   return changed;
 }
 function saveSyncLog() { try { localStorage.setItem(SYNC_LOG_KEY, JSON.stringify(syncLog)); } catch (e) {} }
-function addSyncLog(rec) { syncLog.push(rec); if (syncLog.length > 40) syncLog = syncLog.slice(-40); saveSyncLog(); }
+function addSyncLog(rec) { syncLog.push(rec); if (syncLog.length > 60) syncLog = syncLog.slice(-60); saveSyncLog(); }
+function anySyncConfigured() { return SYNC_CHANNELS.some(syncConfigured); }
 function renderSyncLog() {
   var box = document.getElementById('syncLogBox'), body = document.getElementById('syncLogBody');
   if (!box || !body) return;
-  box.style.display = syncConfigured() ? 'block' : 'none';
+  box.style.display = anySyncConfigured() ? 'block' : 'none';
   if (!syncLog.length) { body.innerHTML = '<p class="miniLabel" style="margin:0;">まだ同期履歴はありません。</p>'; return; }
   var label = { add: '＋追加', update: '✎更新', delete: '✕削除' };
   body.innerHTML = syncLog.slice().reverse().map(function(l) {
-    var ch = l.changes || [];
+    var ch = l.ch && CH[l.ch] ? CH[l.ch] : CH.aqua;
+    var cs = l.changes || [];
     var n = { add: 0, update: 0, delete: 0 };
-    ch.forEach(function(c) { n[c.kind]++; });
-    var head = '<b>' + escapeHtml(formatClock(new Date(l.at))) + '</b>（' + (l.auto ? '自動' : '手動') + '）　' +
-      (ch.length ? '相手の更新 ' + ch.length + '件（追加' + n.add + '・更新' + n.update + '・削除' + n.delete + '）' : '相手の更新なし') +
+    cs.forEach(function(c) { n[c.kind]++; });
+    var head = '<b>' + escapeHtml(formatClock(new Date(l.at))) + '</b> [' + escapeHtml(ch.name) + ']（' + (l.auto ? '自動' : '手動') + '）　' +
+      (cs.length ? '相手の更新 ' + cs.length + '件（追加' + n.add + '・更新' + n.update + '・削除' + n.delete + '）' : (l.mode === 'snapshot' ? '通知用の一覧を送信（一方向）' : '相手の更新なし')) +
       '　<span style="color:#888;">送信 ' + (l.sent || 0) + '件</span>';
-    var rows = ch.map(function(c) {
+    var rows = cs.map(function(c) {
       var t = typeLabel(c.type) + ' (' + c.x + ',' + c.y + ')';
       var tm = '';
-      if (c.kind === 'add') tm = ' → 次の浮上 ' + formatClock(new Date(c.to));
-      if (c.kind === 'update') tm = ' → 次の浮上 ' + formatClock(new Date(c.to)) + '（旧 ' + formatClock(new Date(c.from)) + '）';
+      if (c.kind === 'add') tm = ' → 次の時刻 ' + formatClock(new Date(c.to));
+      if (c.kind === 'update') tm = ' → 次の時刻 ' + formatClock(new Date(c.to)) + '（旧 ' + formatClock(new Date(c.from)) + '）';
       return '<div style="padding-left:12px;">' + label[c.kind] + ' ' + escapeHtml(t) + escapeHtml(tm) + '</div>';
     }).join('');
     return '<div style="padding:6px 0; border-bottom:1px solid #eee;">' + head + rows + '</div>';
   }).join('');
 }
-function syncStatusText() {
-  if (!syncConfigured()) return '同期：未設定';
-  if (!syncSettings.lastSyncAt) return '同期：設定済み（まだ同期していません）';
-  return '同期：設定済み／最終同期 ' + formatClock(new Date(syncSettings.lastSyncAt));
+function isSnapshotMode(ch) { return ch.id === 'fort' && ch.settings.mode === 'snapshot'; }
+function chBtnLabel(ch) { return isSnapshotMode(ch) ? '📤 要塞・ドラゴンを今すぐ送信（通知のみ）' : ch.btnLabel; }
+function fortSettingsPayload() {
+  var s = CH.fort.settings;
+  return { leadMin: s.leadMin, quietOn: !!s.quietOn, quietStart: s.quietStart, quietEnd: s.quietEnd, digest: s.digest !== false };
+}
+function syncStatusText(ch) {
+  if (!syncConfigured(ch)) return '同期：未設定';
+  if (isSnapshotMode(ch)) {
+    return ch.settings.lastSyncAt ? '通知のみ：設定済み／最終送信 ' + formatClock(new Date(ch.settings.lastSyncAt)) + '／5分おきに自動送信（他の端末へは反映されません）' : '通知のみ：設定済み（まだ送信していません）';
+  }
+  var auto = ch.intervalMs ? '／5分おきに自動同期' : '／日付が変わって最初に開いた時に自動同期';
+  if (!ch.settings.lastSyncAt) return '同期：設定済み（まだ同期していません）' + auto;
+  return '同期：設定済み／最終同期 ' + formatClock(new Date(ch.settings.lastSyncAt)) + auto;
 }
 function updateSyncUI() {
   renderSyncLog();
-  var btn = document.getElementById('syncNowBtn');
-  if (btn) btn.style.display = syncConfigured() ? 'block' : 'none';
-  var st = document.getElementById('syncStatus');
-  if (st) st.textContent = syncStatusText();
+  SYNC_CHANNELS.forEach(function(ch) {
+    var btn = document.getElementById(ch.btnId);
+    if (btn) { btn.style.display = syncConfigured(ch) ? 'block' : 'none'; if (!ch.syncing) btn.textContent = chBtnLabel(ch); }
+    var st = document.getElementById(ch.statusId);
+    if (st) st.textContent = syncStatusText(ch);
+  });
 }
-async function syncAquaNow(auto) {
-  if (!syncConfigured()) { if (!auto) showAlert('先に「表示・記録設定」で同期URLと合言葉を保存してください'); return false; }
-  if (syncing) return false;
-  syncing = true;
-  var btn = document.getElementById('syncNowBtn');
+/* この端末の設定でDiscord通知の対象にしてよいか（表示オフ・距離フィルター外は通知しない） */
+function shouldNotifyEntry(e) {
+  if (trackerSettings.enabled && trackerSettings.enabled[e.type] === false) return false;
+  if (nearFilterActive(e.type)) {
+    var dist = coordDistance(e);
+    var maxDist = Number(trackerSettings.nearDistance && trackerSettings.nearDistance[e.type]);
+    if (!Number.isFinite(maxDist) || maxDist < 0) maxDist = 50;
+    if (dist === null || dist > maxDist) return false;
+  }
+  return true;
+}
+async function postToGas(ch, payload) {
+  payload.token = ch.settings.token;
+  // text/plain で送ることで CORS のプリフライトを避ける（GASウェブアプリ向け）
+  var res = await fetch(ch.settings.url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload) });
+  var text = await res.text(), data;
+  try { data = JSON.parse(text); } catch (pe) { throw new Error('GASから正しい応答がありません。ウェブアプリの公開設定（アクセスできるユーザー：全員）とURLを確認してください。'); }
+  if (!data || !data.ok) throw new Error(data && data.error ? data.error : 'サーバーの応答が不正です');
+  return data;
+}
+async function syncNow(ch, auto) {
+  if (!syncConfigured(ch)) { if (!auto) showAlert('先に「表示・記録設定」で' + ch.name + 'の同期URLと合言葉を保存してください'); return false; }
+  if (ch.syncing) return false;
+  ch.syncing = true;
+  ch.lastTryAt = Date.now();
+  var btn = document.getElementById(ch.btnId);
   if (btn) { btn.disabled = true; btn.textContent = '🔄 同期中…'; }
   try {
     var now = Date.now();
-    tombstones = tombstones.filter(function(t) { return now - (Number(t.updatedAt) || 0) < TOMB_KEEP_MS; });
+    ch.tombs = ch.tombs.filter(function(t) { return now - (Number(t.updatedAt) || 0) < TOMB_KEEP_MS; });
+    if (isSnapshotMode(ch)) {
+      // ① 通知のみ（従来方式）：通知してよい対象の「種類・座標・時刻・メモ」だけを丸ごと送る
+      var hasAny = entries.some(function(e) { return ch.types.indexOf(e.type) !== -1; });
+      if (auto && !hasAny) return false;     // 登録が空の端末が自動でGASの一覧を空にしてしまうのを防ぐ
+      var snapItems = [];
+      entries.forEach(function(e) {
+        if (ch.types.indexOf(e.type) === -1 || !Number.isFinite(Number(e.x)) || !Number.isFinite(Number(e.y)) || !Number.isFinite(Number(e.eventAt))) return;
+        if (!shouldNotifyEntry(e)) return;
+        snapItems.push({ type: e.type, x: Number(e.x), y: Number(e.y), label: e.label || '', eventAt: Number(e.eventAt) });
+      });
+      await postToGas(ch, { action: 'snapshot', items: snapItems, settings: fortSettingsPayload() });
+      if (!auto) addSyncLog({ ch: ch.id, at: Date.now(), auto: false, sent: snapItems.length, changes: [], mode: 'snapshot' });
+      ch.settings.lastSyncDate = getLocalDateKey(Date.now()); ch.settings.lastSyncAt = Date.now(); saveSyncSettings(ch);
+      ch.failStreak = 0;
+      updateSyncUI();
+      if (!auto) showToast('📤 通知用の一覧を送信しました（' + snapItems.length + '件）');
+      return true;
+    }
     var items = [];
     entries.forEach(function(e) {
-      if (!isAquaFamily(e.type) || !Number.isFinite(Number(e.x)) || !Number.isFinite(Number(e.y)) || !Number.isFinite(Number(e.eventAt))) return;
-      items.push({ type: e.type, x: Number(e.x), y: Number(e.y), label: e.label || '', eventAt: Number(e.eventAt), updatedAt: Number(e.updatedAt) || 0, deleted: false });
+      if (ch.types.indexOf(e.type) === -1 || !Number.isFinite(Number(e.x)) || !Number.isFinite(Number(e.y)) || !Number.isFinite(Number(e.eventAt))) return;
+      var it = { type: e.type, x: Number(e.x), y: Number(e.y), label: e.label || '', eventAt: Number(e.eventAt), updatedAt: Number(e.updatedAt) || 0, deleted: false };
+      if (ch.id === 'fort') it.notify = shouldNotifyEntry(e);
+      items.push(it);
     });
-    tombstones.forEach(function(t) {
-      var newer = entries.some(function(e) { return isAquaFamily(e.type) && aquaKey(e) === aquaKey(t) && (Number(e.updatedAt) || 0) > (Number(t.updatedAt) || 0); });
+    ch.tombs.forEach(function(t) {
+      var newer = entries.some(function(e) { return ch.types.indexOf(e.type) !== -1 && aquaKey(e) === aquaKey(t) && (Number(e.updatedAt) || 0) > (Number(t.updatedAt) || 0); });
       if (!newer) items.push({ type: t.type, x: t.x, y: t.y, updatedAt: Number(t.updatedAt) || 0, deleted: true });
     });
-    // text/plain で送ることで CORS のプリフライトを避ける（GASウェブアプリ向け）
-    var res = await fetch(syncSettings.url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'sync', token: syncSettings.token, items: items }) });
-    var text = await res.text(), data;
-    try { data = JSON.parse(text); } catch (pe) { throw new Error('GASから正しい応答がありません。ウェブアプリの公開設定（アクセスできるユーザー：全員）とURLを確認してください。'); }
-    if (!data || !data.ok) throw new Error(data && data.error ? data.error : 'サーバーの応答が不正です');
+    var payload = { action: 'sync', items: items };
+    if (ch.id === 'fort') payload.settings = fortSettingsPayload();
+    var data = await postToGas(ch, payload);
     var changes = [];
-    var changed = applyRemoteItems(Array.isArray(data.items) ? data.items : [], changes);
-    addSyncLog({ at: Date.now(), auto: !!auto, sent: items.filter(function(i) { return !i.deleted; }).length, changes: changes });
-    saveEntries(); saveTombstones();
-    syncSettings.lastSyncDate = getLocalDateKey(Date.now()); syncSettings.lastSyncAt = Date.now(); saveSyncSettings();
-    renderAll(); updateSyncUI();
-    showToast(auto ? '🔄 本日のアクアデータを同期しました' + (changed ? '（相手の更新 ' + changed + '件）' : '') : '🔄 同期しました（相手の更新 ' + changed + '件を反映）');
+    var changed = applyRemoteItems(ch, Array.isArray(data.items) ? data.items : [], changes);
+    // 5分おきの自動同期は「相手の更新なし」を履歴に残さない（履歴が埋まるのを防ぐ）
+    if (!auto || changes.length || !ch.intervalMs) addSyncLog({ ch: ch.id, at: Date.now(), auto: !!auto, sent: items.filter(function(i) { return !i.deleted; }).length, changes: changes });
+    saveEntries(); saveTombstones(ch);
+    ch.settings.lastSyncDate = getLocalDateKey(Date.now()); ch.settings.lastSyncAt = Date.now(); saveSyncSettings(ch);
+    ch.failStreak = 0;
+    if (!auto || changed) renderAll();
+    updateSyncUI();
+    if (!auto) showToast('🔄 ' + ch.name + 'を同期しました（相手の更新 ' + changed + '件を反映）');
+    else if (!ch.intervalMs) showToast('🔄 本日の' + ch.name + 'データを同期しました' + (changed ? '（相手の更新 ' + changed + '件）' : ''));
+    else if (changed) showToast('🔄 ' + ch.name + '：他の端末の更新 ' + changed + '件を反映しました');
     return true;
   } catch (err) {
-    if (auto) showToast('アクアの自動同期に失敗しました');
-    else showAlert('同期できませんでした。\n' + (err && err.message ? err.message : err));
+    if (auto) { if (ch.failStreak === 0) showToast(ch.name + 'の自動同期に失敗しました'); ch.failStreak++; }
+    else {
+      var emsg = err && err.message ? err.message : String(err);
+      if (ch.id === 'fort' && /不明な操作/.test(emsg)) emsg += '\n\nGASが古い（Code_Personal.gs）可能性があります。方式を「通知のみ」に切り替えるか、GASを新しいもの（Code_Fortress_Sync.gs）に更新してください。';
+      showAlert((isSnapshotMode(ch) ? '送信できませんでした。\n' : '同期できませんでした。\n') + emsg);
+    }
     return false;
   } finally {
-    syncing = false;
-    if (btn) { btn.disabled = false; btn.textContent = '🔄 アクアを今すぐ同期'; }
+    ch.syncing = false;
+    if (btn) { btn.disabled = false; btn.textContent = chBtnLabel(ch); }
   }
+}
+/* 入力中・編集中・パネル表示中は自動同期を見送る（画面が書き換わって入力が消えるのを防ぐ） */
+function userBusy() {
+  if (inlineEditId != null) return true;
+  var a = document.activeElement;
+  if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT')) return true;
+  if (document.querySelector('.panel.open, .modalOverlay.show')) return true;
+  return false;
+}
+function syncDue(ch) {
+  var now = Date.now();
+  if (now - ch.lastTryAt < SYNC_RETRY_MS && ch.lastTryAt) return false;
+  if (ch.intervalMs) return now - (Number(ch.settings.lastSyncAt) || 0) >= ch.intervalMs - 5000;
+  return ch.settings.lastSyncDate !== getLocalDateKey(now);
 }
 function autoSyncIfNeeded() {
-  if (syncConfigured() && syncSettings.lastSyncDate !== getLocalDateKey(Date.now())) syncAquaNow(true);
+  if (document.visibilityState !== 'visible') return;
+  SYNC_CHANNELS.forEach(function(ch) {
+    if (!syncConfigured(ch) || ch.syncing || !syncDue(ch)) return;
+    if (userBusy()) return;
+    syncNow(ch, true);
+  });
 }
-document.getElementById('syncNowBtn').addEventListener('click', function() { syncAquaNow(false); });
-document.getElementById('syncSaveBtn').addEventListener('click', function() {
-  var url = document.getElementById('syncUrl').value.trim();
-  var token = document.getElementById('syncToken').value.trim();
-  if (!url && !token) {
-    syncSettings = { url: '', token: '', lastSyncDate: '', lastSyncAt: 0 };
-    saveSyncSettings(); updateSyncUI(); showToast('同期を解除しました');
-    return;
+SYNC_CHANNELS.forEach(function(ch) {
+  document.getElementById(ch.btnId).addEventListener('click', function() { syncNow(ch, false); });
+});
+function updateFortModeNote() {
+  var m = document.getElementById('fortMode').value;
+  document.getElementById('fortModeNote').textContent = m === 'snapshot'
+    ? '通知のみ：この端末の一覧（通知対象のみ）をGASへ丸ごと送ります。他の端末へは反映されません。以前のGAS（Code_Personal.gs）でも、新しいGAS（Code_Fortress_Sync.gs）でも使えます。'
+    : '端末同期：全端末が同じGAS・URL・合言葉で全件を送受信します。新しいGAS（Code_Fortress_Sync.gs）が必要です。';
+}
+function fillSyncInputs() {
+  SYNC_CHANNELS.forEach(function(ch) {
+    document.getElementById(ch.urlId).value = ch.settings.url || '';
+    document.getElementById(ch.tokenId).value = ch.settings.token || '';
+  });
+  var f = CH.fort.settings;
+  document.getElementById('fortMode').value = f.mode === 'snapshot' ? 'snapshot' : 'sync';
+  updateFortModeNote();
+  document.getElementById('fortLeadMin').value = f.leadMin;
+  document.getElementById('fortQuietOn').checked = !!f.quietOn;
+  document.getElementById('fortQuietStart').value = f.quietStart;
+  document.getElementById('fortQuietEnd').value = f.quietEnd;
+  document.getElementById('fortDigest').checked = f.digest !== false;
+}
+function readFortNotifyInputs() {
+  var s = CH.fort.settings;
+  function num(id, def, min, max) {
+    var el = document.getElementById(id), v = Number(el.value);
+    if (el.value.trim() === '' || !Number.isFinite(v)) return def;
+    return Math.min(max, Math.max(min, Math.round(v)));
   }
-  if (!/^https:\/\//.test(url) || !token) { showAlert('同期URL（https://〜）と合言葉の両方を入力してください'); return; }
-  if (url !== syncSettings.url || token !== syncSettings.token) { syncSettings.lastSyncDate = ''; syncSettings.lastSyncAt = 0; }
-  syncSettings.url = url; syncSettings.token = token;
-  saveSyncSettings(); updateSyncUI();
-  syncAquaNow(false);
+  s.leadMin = num('fortLeadMin', 10, 0, 60);
+  s.quietOn = document.getElementById('fortQuietOn').checked;
+  s.quietStart = num('fortQuietStart', 0, 0, 23);
+  s.quietEnd = num('fortQuietEnd', 7, 0, 23);
+  s.digest = document.getElementById('fortDigest').checked;
+}
+SYNC_CHANNELS.forEach(function(ch) {
+  document.getElementById(ch.saveBtnId).addEventListener('click', function() {
+    var url = document.getElementById(ch.urlId).value.trim();
+    var token = document.getElementById(ch.tokenId).value.trim();
+    if (ch.id === 'fort') {
+      readFortNotifyInputs();
+      var newMode = document.getElementById('fortMode').value === 'snapshot' ? 'snapshot' : 'sync';
+      if (newMode !== ch.settings.mode) { ch.settings.mode = newMode; ch.settings.lastSyncAt = 0; }
+    }
+    if (!url && !token) {
+      ch.settings.url = ''; ch.settings.token = ''; ch.settings.lastSyncDate = ''; ch.settings.lastSyncAt = 0;
+      saveSyncSettings(ch); updateSyncUI(); showToast(ch.name + 'の同期を解除しました');
+      return;
+    }
+    if (!/^https:\/\//.test(url) || !token) { showAlert('同期URL（https://〜）と合言葉の両方を入力してください'); return; }
+    if (url !== ch.settings.url || token !== ch.settings.token) { ch.settings.lastSyncDate = ''; ch.settings.lastSyncAt = 0; }
+    ch.settings.url = url; ch.settings.token = token;
+    ch.lastTryAt = 0;
+    saveSyncSettings(ch); updateSyncUI();
+    syncNow(ch, false);
+  });
+});
+document.getElementById('fortMode').addEventListener('change', updateFortModeNote);
+document.getElementById('fortTestBtn').addEventListener('click', async function() {
+  var ch = CH.fort;
+  if (!syncConfigured(ch)) { showAlert('先に同期URLと合言葉を保存してください'); return; }
+  try { await postToGas(ch, { action: 'test' }); showToast('✅ テスト通知を送信しました'); }
+  catch (err) { showAlert('テスト通知に失敗しました。\n' + (err && err.message ? err.message : err)); }
 });
 document.getElementById('syncLogClear').addEventListener('click', function() { syncLog = []; saveSyncLog(); renderSyncLog(); });
 document.addEventListener('visibilitychange', function() { if (document.visibilityState === 'visible') autoSyncIfNeeded(); });
-
-/* ---------- 要塞・ドラゴン通知（Discord / 個人用GAS） ---------- */
-var NOTIFY_KEY = 'ggeNotifySettings';
-var NOTIFY_TYPES = [['dragon','ドラゴン'],['fortress','砂漠の要塞'],['wildFortress','野生の要塞']];
-var NOTIFY_MAX_AGE_MS = 12 * 3600 * 1000;   // 攻撃可能になってから12時間以内の分だけ送る（GAS側のまとめ通知の範囲と合わせる）
-var NOTIFY_MAX_ITEMS = 500;
-var notifySettings = { url:'', token:'', on:false, types:{ dragon:{on:true,near:false,dist:50}, fortress:{on:true,near:false,dist:50}, wildFortress:{on:true,near:false,dist:50} }, leadMin:10, quietOn:false, quietStart:0, quietEnd:7, digest:true, lastSyncAt:0, lastCount:0, lastPayload:'' };
-try {
-  var rawNt = JSON.parse(localStorage.getItem(NOTIFY_KEY) || '{}');
-  var typesNt = notifySettings.types;
-  notifySettings = Object.assign(notifySettings, rawNt);
-  NOTIFY_TYPES.forEach(function(t) { typesNt[t[0]] = Object.assign({}, typesNt[t[0]], (rawNt.types || {})[t[0]] || {}); });
-  notifySettings.types = typesNt;
-} catch (e) {}
-var notifySending = false, notifyTimer = null, notifyDirty = false;
-
-function saveNotifySettings() { try { localStorage.setItem(NOTIFY_KEY, JSON.stringify(notifySettings)); } catch (e) {} }
-function notifyConfigured() { return !!(notifySettings.url && notifySettings.token); }
-
-/* GASへ送る「通知してよい対象」だけの一覧を作る（種類オン／オフ・距離・期限で絞る） */
-function buildNotifyItems() {
-  if (!notifySettings.on) return [];
-  var now = Date.now();
-  var map = {};
-  entries.forEach(function(e) {
-    var cfg = notifySettings.types[e.type];
-    if (!cfg || !cfg.on) return;
-    var x = Number(e.x), y = Number(e.y), at = Number(e.eventAt);
-    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(at) || at <= 0) return;
-    if (at < now - NOTIFY_MAX_AGE_MS) return;
-    if (cfg.near) {
-      if (!hasHome(e.type)) return;                       // 自分の座標が未入力なら、距離指定の種類は通知しない
-      var d = coordDistance(e), lim = Number(cfg.dist);
-      if (!Number.isFinite(lim) || lim < 0) lim = 50;
-      if (d === null || d > lim) return;
-    }
-    var k = e.type + '|' + x + '|' + y;
-    if (!map[k] || map[k].eventAt < at) map[k] = { type: e.type, x: x, y: y, label: String(e.label || '').slice(0, 50), eventAt: at };
-  });
-  return Object.keys(map).map(function(k) { return map[k]; }).sort(function(a, b) { return a.eventAt - b.eventAt; }).slice(0, NOTIFY_MAX_ITEMS);
-}
-function notifyWarnings() {
-  var w = [];
-  NOTIFY_TYPES.forEach(function(t) { var c = notifySettings.types[t[0]]; if (c.on && c.near && !hasHome(t[0])) w.push(t[1]); });
-  return w.length ? '⚠ 距離指定中ですが自分の座標が未入力のため、通知されません：' + w.join('・') : '';
-}
-function notifyStatusText() {
-  if (!notifyConfigured()) return '通知：未設定';
-  var base = !notifySettings.on ? '通知：停止中（オフ）' : (notifySettings.lastSyncAt ? '通知：有効／通知対象 ' + notifySettings.lastCount + '件／最終送信 ' + formatClock(new Date(notifySettings.lastSyncAt)) : '通知：有効（まだ送信していません）');
-  var w = notifyWarnings();
-  return w ? base + '\n' + w : base;
-}
-function updateNotifyUI() {
-  var st = document.getElementById('ntStatus');
-  if (st) { st.style.whiteSpace = 'pre-line'; st.textContent = notifyStatusText(); }
-}
-function postNotify(body) {
-  return fetch(notifySettings.url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) }).then(function(res) { return res.text(); }).then(function(text) {
-    var data;
-    try { data = JSON.parse(text); } catch (pe) { throw new Error('GASから正しい応答がありません。ウェブアプリの公開設定（アクセスできるユーザー：全員）とURLを確認してください。'); }
-    return data;
-  });
-}
-async function syncNotifyNow(manual) {
-  if (!notifyConfigured()) { if (manual) showAlert('先にGASのURLと合言葉を入力してください'); return false; }
-  if (notifySending) { notifyDirty = true; return false; }
-  var items = buildNotifyItems();
-  var settings = { leadMin: Number(notifySettings.leadMin), quietOn: !!notifySettings.quietOn, quietStart: Number(notifySettings.quietStart), quietEnd: Number(notifySettings.quietEnd), digest: notifySettings.digest !== false };
-  var sig = JSON.stringify({ s: settings, i: items, u: notifySettings.url });
-  if (!manual && sig === notifySettings.lastPayload && notifySettings.lastSyncAt) { notifyDirty = false; return true; }
-  notifySending = true;
-  try {
-    var data = await postNotify({ action: 'snapshot', token: notifySettings.token, settings: settings, items: items });
-    if (!data.ok) throw new Error(data.error || '送信に失敗しました');
-    notifySettings.lastPayload = sig; notifySettings.lastSyncAt = Date.now(); notifySettings.lastCount = items.length;
-    saveNotifySettings(); notifyDirty = false; updateNotifyUI();
-    if (manual) showToast('通知設定を送信しました（通知対象 ' + items.length + '件）');
-    return true;
-  } catch (err) {
-    notifyDirty = true;
-    if (manual) showAlert('通知設定の送信に失敗しました\n' + (err && err.message ? err.message : err));
-    return false;
-  } finally {
-    notifySending = false;
-  }
-}
-/* 登録データ・設定が変わったら、少し待ってからまとめて送る */
-function scheduleNotifySync() {
-  if (!notifyConfigured()) return;
-  notifyDirty = true;
-  clearTimeout(notifyTimer);
-  notifyTimer = setTimeout(function() { syncNotifyNow(false); }, 3000);
-}
-(function() {
-  var origSaveEntries = saveEntries;
-  saveEntries = function() { origSaveEntries.apply(this, arguments); scheduleNotifySync(); };
-  var origSaveSettings = saveTrackerSettings;
-  saveTrackerSettings = function() { origSaveSettings.apply(this, arguments); scheduleNotifySync(); };
-})();
-document.addEventListener('visibilitychange', function() { if (document.visibilityState === 'visible' && notifyDirty) scheduleNotifySync(); });
-
-function readNotifyForm() {
-  notifySettings.url = document.getElementById('ntUrl').value.trim();
-  notifySettings.token = document.getElementById('ntToken').value.trim();
-  notifySettings.on = document.getElementById('ntOn').checked;
-  NOTIFY_TYPES.forEach(function(t) {
-    var k = t[0], v = Number(document.querySelector('[data-ntdist="' + k + '"]').value);
-    notifySettings.types[k] = { on: document.querySelector('[data-nton="' + k + '"]').checked, near: document.querySelector('[data-ntnear="' + k + '"]').checked, dist: (Number.isFinite(v) && v >= 0 && document.querySelector('[data-ntdist="' + k + '"]').value.trim() !== '') ? v : 50 };
-  });
-  notifySettings.leadMin = Number(document.getElementById('ntLead').value);
-  notifySettings.quietOn = document.getElementById('ntQuietOn').checked;
-  notifySettings.quietStart = Number(document.getElementById('ntQuietStart').value);
-  notifySettings.quietEnd = Number(document.getElementById('ntQuietEnd').value);
-  notifySettings.digest = document.getElementById('ntDigest').checked;
-}
-function initNotifyUI() {
-  document.getElementById('ntTypes').innerHTML = NOTIFY_TYPES.map(function(t) {
-    var c = notifySettings.types[t[0]];
-    return '<div style="padding:7px 0;border-bottom:1px solid #e5e5e5;"><label style="display:flex;gap:8px;align-items:center;margin:4px 0;color:#2c2c2a;"><input type="checkbox" data-nton="' + t[0] + '"' + (c.on ? ' checked' : '') + '>' + t[1] + 'を通知</label>' +
-      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:4px 0 4px 24px;color:#555;font-size:13px;"><label style="display:flex;gap:6px;align-items:center;"><input type="checkbox" data-ntnear="' + t[0] + '"' + (c.near ? ' checked' : '') + '>距離上限以内のみ通知</label>' +
-      '<input type="number" min="0" step="1" data-ntdist="' + t[0] + '" value="' + c.dist + '" style="width:76px;padding:5px;border:1px solid #ccc;border-radius:6px;"><span>以内</span></div></div>';
-  }).join('');
-  document.getElementById('ntLead').innerHTML = [[0,'攻撃可能になったら'],[5,'5分前'],[10,'10分前'],[15,'15分前'],[30,'30分前']].map(function(o) { return '<option value="' + o[0] + '">' + o[1] + '</option>'; }).join('');
-  var hours = ''; for (var h = 0; h < 24; h++) hours += '<option value="' + h + '">' + h + '時</option>';
-  document.getElementById('ntQuietStart').innerHTML = hours;
-  document.getElementById('ntQuietEnd').innerHTML = hours;
-  document.getElementById('ntUrl').value = notifySettings.url || '';
-  document.getElementById('ntToken').value = notifySettings.token || '';
-  document.getElementById('ntOn').checked = !!notifySettings.on;
-  var leadSel = document.getElementById('ntLead');
-  leadSel.value = String(notifySettings.leadMin);
-  if (leadSel.value !== String(notifySettings.leadMin)) leadSel.value = '10';
-  document.getElementById('ntQuietOn').checked = !!notifySettings.quietOn;
-  document.getElementById('ntQuietStart').value = String(notifySettings.quietStart);
-  document.getElementById('ntQuietEnd').value = String(notifySettings.quietEnd);
-  document.getElementById('ntDigest').checked = notifySettings.digest !== false;
-  document.getElementById('ntSaveBtn').addEventListener('click', function() {
-    readNotifyForm();
-    if (!notifySettings.url && !notifySettings.token) {
-      notifySettings.lastPayload = ''; notifySettings.lastSyncAt = 0; notifySettings.lastCount = 0; notifySettings.on = false;
-      saveNotifySettings(); updateNotifyUI(); showToast('通知設定を解除しました'); return;
-    }
-    if (!notifyConfigured()) { showAlert('URLと合言葉は両方入力してください'); return; }
-    saveNotifySettings(); updateNotifyUI(); syncNotifyNow(true);
-  });
-  document.getElementById('ntTestBtn').addEventListener('click', async function() {
-    readNotifyForm(); saveNotifySettings();
-    if (!notifyConfigured()) { showAlert('先にGASのURLと合言葉を入力してください'); return; }
-    try {
-      var data = await postNotify({ action: 'test', token: notifySettings.token });
-      if (data.ok) showToast('テスト通知を送りました。Discordを確認してください');
-      else showAlert('テスト通知に失敗しました\n' + (data.error || ''));
-    } catch (err) { showAlert('テスト通知に失敗しました\n' + (err && err.message ? err.message : err)); }
-  });
-  updateNotifyUI();
-}
+setInterval(autoSyncIfNeeded, 30000);   // 5分おきの同期チェック（30秒ごとに「時間になったか」を確認）
 
 /* ---------- init & ticker ---------- */
 migrateIfNeeded();
@@ -1549,14 +1560,11 @@ document.getElementById('saveSettings').addEventListener('click',function(){
  saveTrackerSettings();updateNearCounts();renderAll();showToast('設定を保存しました');
 });
 document.getElementById('statsDate').value = getLocalDateKey(Date.now());
-document.getElementById('syncUrl').value = syncSettings.url || '';
-document.getElementById('syncToken').value = syncSettings.token || '';
+fillSyncInputs();
 updateSyncUI();
 renderAll();
 renderStats();
 autoSyncIfNeeded();
-initNotifyUI();
-scheduleNotifySync();
 
 setInterval(function() {
   var active = document.activeElement;
