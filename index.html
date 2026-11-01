@@ -203,7 +203,8 @@
       <label style="display:flex;gap:8px;align-items:center;margin:6px 0 10px;font-size:13px;"><input type="checkbox" id="fortDigest">停止が明けたら、停止中に攻撃可能になった分をまとめて通知</label>
       <button class="addBtn secondary" id="fortSyncSaveBtn" type="button">同期設定を保存して今すぐ同期</button>
       <button class="addBtn secondary" id="fortTestBtn" type="button">Discord通知テスト</button>
-      <p class="miniLabel" id="fortSyncStatus" style="margin-top:2px;"></p>
+      <button class="addBtn secondary" id="fortHistResyncBtn" type="button">過去のルビー記録をすべて同期し直す</button>
+      <p class="miniLabel" id="fortSyncStatus" style="margin-top:2px;white-space:pre-line;"></p>
       <p class="miniLabel">URLと合言葉を両方空欄にして保存すると、同期を解除します（この端末のデータは消えません）。通知の対象は、この端末の「表示」と「距離フィルター」の設定に合うものだけです（端末ごとに設定が違うと、最後に同期した端末の設定になります）。</p>
       <h3 style="font-size:14px;margin:18px 0 6px;color:#b5442e;">月次リセット</h3>
       <p class="miniLabel">小アクア・大アクアの座標登録をまとめて削除できます。攻撃履歴・ルビー集計は残ります。同期設定済みの場合、削除は次回の同期で相手側にも反映されます。</p>
@@ -1260,17 +1261,19 @@ SYNC_CHANNELS.forEach(function(ch) {
 });
 /* ルビー獲得記録の同期状態：since=前回受け取ったサーバー時刻、known=GASと共有済みの記録ID、dels=未送信の削除 */
 var HIST_SYNC_KEY = 'ggeHistSync';
-var histSync = { since: 0, known: {}, dels: [] };
+var histSync = { since: 0, known: {}, dels: [], supported: null, lastAt: 0, lastSent: 0, lastRecv: 0, lastSkipped: 0 };
 try {
   var hs0 = JSON.parse(localStorage.getItem(HIST_SYNC_KEY) || '{}');
   if (hs0 && typeof hs0 === 'object') {
     histSync.since = Number(hs0.since) || 0;
     if (hs0.known && typeof hs0.known === 'object') histSync.known = hs0.known;
     if (Array.isArray(hs0.dels)) histSync.dels = hs0.dels;
+    if (hs0.supported === true || hs0.supported === false) histSync.supported = hs0.supported;
+    histSync.lastAt = Number(hs0.lastAt) || 0; histSync.lastSent = Number(hs0.lastSent) || 0; histSync.lastRecv = Number(hs0.lastRecv) || 0; histSync.lastSkipped = Number(hs0.lastSkipped) || 0;
   }
 } catch (e) {}
 function saveHistSync() { try { localStorage.setItem(HIST_SYNC_KEY, JSON.stringify(histSync)); } catch (e) {} }
-function resetHistSync() { histSync.since = 0; histSync.known = {}; saveHistSync(); }
+function resetHistSync() { histSync.since = 0; histSync.known = {}; histSync.supported = null; histSync.lastAt = 0; saveHistSync(); }
 function histNoteDelete(id) {
   if (id == null) return;
   id = String(id);
@@ -1282,6 +1285,27 @@ function histNoteDelete(id) {
 function findEntryForHist(h) {
   return entries.find(function(e) { return h.entryId && e.id === h.entryId; }) ||
     entries.find(function(e) { return e.type === h.type && Number(e.x) === Number(h.x) && Number(e.y) === Number(h.y); });
+}
+/* 古い形式の記録（id・種類・座標が欠けている）を、可能な範囲で補ってから同期に回す。補えないものは件数だけ返す */
+function normalizeLocalHistory(types) {
+  var changed = false, skipped = 0;
+  attackHistory.forEach(function(h) {
+    if (!h) return;
+    var e = (!h.type || h.x == null || h.y == null) ? entries.find(function(x) { return h.entryId && x.id === h.entryId; }) : null;
+    if (e) {
+      if (!h.type) { h.type = e.type; changed = true; }
+      if (h.x == null) { h.x = e.x; changed = true; }
+      if (h.y == null) { h.y = e.y; changed = true; }
+    }
+    if (h.id == null || h.id === '') {
+      // 内容から決まるIDにして、同じ記録を別の端末が持っていても重複しないようにする
+      h.id = 'legacy-' + (Number(h.at) || 0) + '-' + h.x + '-' + h.y + '-' + (Number(h.ruby) || 0); changed = true;
+    }
+    if (types.indexOf(h.type) === -1) return;               // アクア等は対象外（数えない）
+    if (!Number.isFinite(Number(h.x)) || !Number.isFinite(Number(h.y)) || !Number.isFinite(Number(h.at))) skipped++;
+  });
+  if (changed) saveHistory();
+  return skipped;
 }
 /* 他の端末のルビー記録を反映（追加と削除だけ） */
 function applyRemoteHistory(data, hCh) {
@@ -1414,8 +1438,13 @@ function fortSettingsPayload() {
 function syncStatusText(ch) {
   if (!syncConfigured(ch)) return '同期：未設定';
   var auto = ch.intervalMs ? '／5分おきに自動同期' : '／日付が変わって最初に開いた時に自動同期';
-  if (!ch.settings.lastSyncAt) return '同期：設定済み（まだ同期していません）' + auto;
-  return '同期：設定済み／最終同期 ' + formatClock(new Date(ch.settings.lastSyncAt)) + auto;
+  var rb = '';
+  if (ch.id === 'fort') {
+    if (histSync.supported === true) rb = '\nルビー記録の同期：有効（最終 ' + formatClock(new Date(histSync.lastAt)) + '／送信' + histSync.lastSent + '・受信' + histSync.lastRecv + '件）' + (histSync.lastSkipped ? '\n※ 種類・座標・時刻が不明で同期できない古い記録が ' + histSync.lastSkipped + '件あります' : '');
+    else if (histSync.supported === false) rb = '\n⚠ ルビー記録の同期：GASが未対応です。Code_Fortress_Sync.gs を貼り直して「新しいバージョン」で再デプロイしてください。';
+  }
+  if (!ch.settings.lastSyncAt) return '同期：設定済み（まだ同期していません）' + auto + rb;
+  return '同期：設定済み／最終同期 ' + formatClock(new Date(ch.settings.lastSyncAt)) + auto + rb;
 }
 function updateSyncUI() {
   renderSyncLog();
@@ -1473,6 +1502,7 @@ async function syncNow(ch, auto) {
       payload.settings = fortSettingsPayload();
       // ルビー獲得記録：未送信の削除と、まだ共有していない新しい記録だけを送る（差分）
       var hItems = [];
+      histSync.lastSkipped = normalizeLocalHistory(ch.types);
       histSync.dels.slice(0, 1000).forEach(function(id) { hSentDel.push(id); hItems.push({ id: id, deleted: true }); });
       attackHistory.forEach(function(h) {
         if (!h || h.id == null || hItems.length >= 3000) return;
@@ -1488,8 +1518,12 @@ async function syncNow(ch, auto) {
     var data = await postToGas(ch, payload);
     var changes = [];
     var changed = applyRemoteItems(ch, Array.isArray(data.items) ? data.items : [], changes);
-    if (ch.id === 'fort' && data.historyNow != null) {     // 古いGAS（ルビー同期なし）のときは何もしない
+    if (ch.id === 'fort' && data.historyNow == null) {     // 古いGAS（ルビー同期なし）
+      histSync.supported = false; saveHistSync();
+    }
+    if (ch.id === 'fort' && data.historyNow != null) {
       applyRemoteHistory(data, hCh);
+      histSync.supported = true; histSync.lastAt = Date.now(); histSync.lastSent = hSentNew.length + hSentDel.length; histSync.lastRecv = hCh.add + hCh.del;
       hSentNew.forEach(function(id) { histSync.known[id] = 1; });
       histSync.dels = histSync.dels.filter(function(id) { return hSentDel.indexOf(id) === -1; });
       histSync.since = Number(data.historyNow) || histSync.since;
@@ -1503,7 +1537,10 @@ async function syncNow(ch, auto) {
     ch.failStreak = 0;
     if (!auto || changed) { renderAll(); renderStats(); }
     updateSyncUI();
-    if (!auto) showToast('🔄 ' + ch.name + 'を同期しました（相手の更新 ' + changed + '件を反映）');
+    if (!auto) {
+      showToast('🔄 ' + ch.name + 'を同期しました（相手の更新 ' + changed + '件を反映）' + (ch.id === 'fort' && histSync.supported ? '／ルビー記録 送信' + histSync.lastSent + '・受信' + histSync.lastRecv : ''));
+      if (ch.id === 'fort' && histSync.supported === false) showAlert('座標は同期できましたが、ルビー記録は同期されていません。\n\nGAS（Code_Fortress_Sync.gs）が古いままのようです。最新のコードを貼り付けて保存し、「デプロイ → デプロイを管理 → 編集 → 新しいバージョン」で再デプロイしてください。');
+    }
     else if (!ch.intervalMs) showToast('🔄 本日の' + ch.name + 'データを同期しました' + (changed ? '（相手の更新 ' + changed + '件）' : ''));
     else if (changed) showToast('🔄 ' + ch.name + '：他の端末の更新 ' + changed + '件を反映しました');
     return true;
@@ -1590,6 +1627,14 @@ SYNC_CHANNELS.forEach(function(ch) {
     saveSyncSettings(ch); updateSyncUI();
     syncNow(ch, false);
   });
+});
+document.getElementById('fortHistResyncBtn').addEventListener('click', async function() {
+  var ch = CH.fort;
+  if (!syncConfigured(ch)) { showAlert('先に同期URLと合言葉を保存してください'); return; }
+  var ok = await showConfirm('この端末のルビー記録をすべてGASへ送り直し、他の端末の記録もすべて受け取り直します。\n（同じ記録が重複して増えることはありません）\nよろしいですか？');
+  if (!ok) return;
+  resetHistSync(); ch.lastTryAt = 0;
+  syncNow(ch, false);
 });
 document.getElementById('fortTestBtn').addEventListener('click', async function() {
   var ch = CH.fort;
